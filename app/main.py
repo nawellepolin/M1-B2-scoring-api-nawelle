@@ -1,7 +1,5 @@
-"""Pyrenex Risk API — entry point.
+"""Pyrenex Risk API — entry point."""
 
-TODO — Complete the routes /info and /predict.
-"""
 from __future__ import annotations
 
 import json
@@ -11,7 +9,9 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Security, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from loguru import logger
 
 from app.middleware import LoggingMiddleware
@@ -71,6 +71,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 # --- Routes -----------------------------------------------------------------
@@ -86,24 +95,34 @@ async def health() -> HealthResponse:
 
 @app.get("/info")
 async def info() -> dict:
-    """Return loaded model metadata.
-
-    TODO — Return api_version plus the 5 mandatory metadata keys:
-    model_version, created_at, sklearn_version, dataset_sha256,
-    metrics_holdout. (model_name recommended, with a fallback.)
-    """
-    # TODO — Implement (cf. mini-cours 05_Versionning_modele_essentiel.md)
-    raise NotImplementedError("Implement /info endpoint")
+    return {
+        "api_version": app.version,
+        "model_name": app.state.metadata.get("model_name", MODEL_PATH.stem),
+        "model_version": app.state.metadata["model_version"],
+        "created_at": app.state.metadata["created_at"],
+        "sklearn_version": app.state.metadata["sklearn_version"],
+        "dataset_sha256": app.state.metadata["dataset_sha256"],
+        "metrics_holdout": app.state.metadata["metrics_holdout"],
+    }
 
 
 @app.post("/predict", response_model=Prediction, status_code=status.HTTP_200_OK)
-async def predict(application: LoanApplication, request: Request) -> Prediction:
-    """Predict default risk for one loan application.
+async def predict(
+    application: LoanApplication,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
+) -> Prediction:
+    request_id = request.state.request_id
+    try:
+        X = pd.DataFrame([application.model_dump()])
+        pred = int(app.state.model.predict(X)[0])
+        proba = float(app.state.model.predict_proba(X)[0, 1])
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {exc}") from exc
 
-    TODO — Implement:
-      1. Convert application to a single-row DataFrame
-      2. Call model.predict() and model.predict_proba()
-      3. Return Prediction with request_id from request.state
-    """
-    # TODO — Implement (cf. mini-cours 01_FastAPI_Pydantic_ml_essentiel.md)
-    raise NotImplementedError("Implement /predict endpoint")
+    return Prediction(
+        prediction=pred,
+        probability=round(proba, 4),
+        model_version=app.state.metadata["model_version"],
+        request_id=request_id,
+    )
