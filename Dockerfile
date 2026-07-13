@@ -1,11 +1,10 @@
 # Dockerfile — M1-B2 Pyrenex Risk API
-# TODO — Complète les sections marquées (cf. mini-cours 02_Dockerfile_Python_essentiel.md)
 
-# 1. Base image (TODO — choisis la bonne image slim)
+# 1. Base image (image slim)
 FROM python:3.11-slim
 
-# 2. User non-root (TODO — crée appuser avec uid 1000)
-
+# 2. User non-root (appuser avec uid 1000)
+RUN useradd --create-home --shell /bin/bash --uid 1000 appuser
 
 # 3. Working directory
 WORKDIR /home/appuser/app
@@ -19,12 +18,16 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY --chown=appuser:appuser app/ ./app/
 COPY --chown=appuser:appuser models/ ./models/
 
-# 6. TODO — Passer au user appuser
+# 6. Passer au user appuser
+RUN mkdir -p /home/appuser/app/logs && chown -R appuser:appuser /home/appuser/app
+USER appuser
 
 # 7. Port exposé (documentaire)
 EXPOSE 8000
 
-# 8. TODO — Healthcheck (cf. mini-cours 02)
+# 8. Healthcheck (cf. mini-cours 02)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-
-# 9. TODO — CMD uvicorn (en forme exec, --host 0.0.0.0, port 8000)
+# 9. CMD uvicorn (en forme exec, --host 0.0.0.0, port 8000)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
