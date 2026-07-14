@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import Request
 from loguru import logger
@@ -30,19 +31,30 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             raise
 
         latency_ms = round((time.perf_counter() - start) * 1000, 2)
+        payload_size = int(response.headers.get("content-length") or 0)
         log_level = (
             "INFO" if status_code < 400
             else "WARNING" if status_code < 500
             else "ERROR"
         )
 
-        logger.bind(request_id=request_id).log(
-            log_level,
-            "{method} {path} {status} {latency_ms}ms",
+        logger.bind(
+            request_id=request_id,
             method=request.method,
             path=request.url.path,
             status=status_code,
             latency_ms=latency_ms,
+            payload_size=payload_size,
+            level=log_level,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        ).log(
+            log_level,
+            "{method} {path} {status} {latency_ms}ms {payload_size}B",
+            method=request.method,
+            path=request.url.path,
+            status=status_code,
+            latency_ms=latency_ms,
+            payload_size=payload_size,
         )
 
         response.headers["X-Request-ID"] = request_id

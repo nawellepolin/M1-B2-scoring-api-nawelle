@@ -1,8 +1,4 @@
-"""Pydantic schemas for the Pyrenex Risk API.
-
-TODO — Align LoanApplication with the feature_columns from your
-pyrenex_risk_v2.json metadata (M1-B1 output).
-"""
+"""Pydantic schemas for the Pyrenex Risk API."""
 from __future__ import annotations
 
 from typing import Literal, Optional
@@ -11,12 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class LoanApplication(BaseModel):
-    """Input schema for /predict.
-
-    TODO — Replace placeholder fields with the actual feature_columns
-    from your pyrenex_risk_v2.json. Add Field(..., ge=…, le=…) bounds
-    where your EDA showed reasonable ranges.
-    """
+    """Input schema for /predict."""
 
     loan_amnt: float = Field(..., ge=500, le=40_000, description="Loan amount (USD)")
     term: Literal["36 months", "60 months"] = Field(..., description="Loan term, e.g. '36 months' or '60 months'")
