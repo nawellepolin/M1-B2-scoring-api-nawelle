@@ -1,162 +1,81 @@
-# M1-B2 — Squelette repo (Pyrenex Crédit scoring API)
+# Pyrenex Risk API — M1-B2
 
-> **Repo template GitHub.** Clique sur **« Use this template »** en haut à
-> droite de cette page → **Create a new repository** → nomme-le
-> `M1-B2-scoring-api-<prénom>` sur **ton** compte GitHub personnel.
-> C'est ce nouveau repo que tu cloneras pour travailler.
+API FastAPI servant le modèle de scoring crédit `pyrenex_risk_v2` (issu de M1-B1) : prédiction de risque de défaut (`Fully Paid` / `Charged Off`) à partir des caractéristiques d'une demande de prêt.
+
+## Schéma
+
+```mermaid
+flowchart LR
+    Client -->|"POST /predict (JSON)"| API["FastAPI — LoggingMiddleware\n(request_id, X-Request-ID)"]
+    API -->|features en DataFrame| Model[("RandomForest\npyrenex_risk_v2.joblib")]
+    Model -->|prediction + probability| API
+    API -->|"Prediction JSON + header X-Request-ID"| Client
+    API -.->|log JSON structuré| Logs[("logs/api.log")]
+```
 
 ---
 
 ## 🚀 Démarrage
 
 ```bash
-# 0. Clone ton repo perso fraîchement créé
-git clone git@github.com:<ton-user>/M1-B2-scoring-api-<prenom>.git
-cd M1-B2-scoring-api-<prenom>
-
-# 1. Environnement virtuel
-python -m venv .venv && source .venv/bin/activate     # Linux/macOS
-# .venv\Scripts\activate                              # Windows
-
-# 2. Dépendances
-pip install -r requirements.txt
-#    ▸ Option uv (si tu as suivi le setup avec uv) — un `uv venv` n'embarque
-#      PAS pip, il faut donc `uv pip` :
-# uv venv --python 3.11 && source .venv/bin/activate
-# uv pip install -r requirements.txt
-
-# 3. Copie ton modèle M1-B1 (cf. section « Modèle » ci-dessous) — le service
-#    ne démarre PAS sans lui
-cp ../M1-B1-scoring-<prenom>/models/pyrenex_risk_v2.joblib ./models/
-cp ../M1-B1-scoring-<prenom>/models/pyrenex_risk_v2.json   ./models/
-
-# 4. Vérification
-uvicorn app.main:app --reload                          # → démarre sans erreur
+docker build -t pyrenex-risk-api:0.1.0 .
+docker run -d -p 8000:8000 --name pyrenex-api pyrenex-risk-api:0.1.0
+curl http://localhost:8000/health
 ```
 
-Ensuite (autre terminal) :
+---
+
+## 📡 Exemple `/predict`
 
 ```bash
-curl http://localhost:8000/health                      # → 200
-curl http://localhost:8000/info
-pytest -v                                              # → tests "skipped" tant que les TODO
-                                                       #   ne sont pas faits : c'est NORMAL au départ
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loan_amnt": 10000,
+    "term": "36 months",
+    "int_rate": 12.5,
+    "annual_inc": 55000,
+    "purpose": "debt_consolidation",
+    "installment": 320.50,
+    "dti": 18.5,
+    "delinq_2yrs": 0,
+    "fico_range_low": 700,
+    "revol_util": 45.3,
+    "grade": "B",
+    "emp_length": "5 years",
+    "home_ownership": "MORTGAGE",
+    "verification_status": "Verified"
+  }'
 ```
 
-> ℹ️ Sans le modèle dans `models/`, uvicorn refuse de démarrer (c'est voulu :
-> une API de scoring sans modèle ne doit pas prétendre être en bonne santé)
-> et `pytest` skippe les tests avec un message explicite. Si tu vois ça,
-> retourne à l'étape 3.
+Réponse :
 
----
-
-## 📁 Structure du repo
-
-```
-M1-B2-scoring-api-<prenom>/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                  # FastAPI app + lifespan + routes
-│   ├── schemas.py               # Pydantic schemas (LoanApplication, Prediction)
-│   └── middleware.py            # LoggingMiddleware Loguru
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py              # fixtures pytest (client + valid_payload)
-│   ├── test_model_contract.py   # test 0 — valide le .joblib avant l'API
-│   └── test_api.py              # tests routes /health, /info, /predict
-├── models/                      # ton .joblib + .json depuis M1-B1
-│   └── .gitkeep
-├── logs/                        # logs rotatifs (gitignored)
-│   └── .gitkeep
-├── ressources/                  # 📚 mini-cours d'appui (lecture juste-à-temps)
-│   ├── 01_FastAPI_Pydantic_ml_essentiel.md
-│   ├── 02_Dockerfile_Python_essentiel.md
-│   ├── 03_Pytest_TestClient_essentiel.md
-│   ├── 04_Loguru_middleware_essentiel.md
-│   ├── 05_Versionning_modele_essentiel.md
-│   ├── liens_officiels.md
-│   └── README.md                # ordre de mobilisation + objectifs
-├── Dockerfile                   # à compléter (cf. ressources/02)
-├── .dockerignore
-├── .gitignore
-├── requirements.txt
-└── README.md (ce fichier — à compléter avec schéma Mermaid + démarrage)
+```json
+{
+  "prediction": 0,
+  "probability": 0.1832,
+  "model_version": "v2.0.0",
+  "request_id": "1a841d9d-e8f1-4c96-8471-e8a99a365bf4"
+}
 ```
 
 ---
 
-## 📚 Mini-cours d'appui
+## 🏷️ Versionning
 
-Les **5 mini-cours pédagogiques** du brief sont fournis dans
-[`./ressources/`](./ressources/). Lecture juste-à-temps, ~15-20 min chacun :
+La version **servie à l'instant T** se lit à deux endroits, qui doivent rester synchronisés :
 
-| Tâche | Mini-cours |
-|---|---|
-| Routes FastAPI + Pydantic ML | [`01_FastAPI_Pydantic_ml_essentiel.md`](./ressources/01_FastAPI_Pydantic_ml_essentiel.md) |
-| Dockerfile Python production | [`02_Dockerfile_Python_essentiel.md`](./ressources/02_Dockerfile_Python_essentiel.md) |
-| Tests pytest + TestClient | [`03_Pytest_TestClient_essentiel.md`](./ressources/03_Pytest_TestClient_essentiel.md) |
-| Loguru middleware structuré | [`04_Loguru_middleware_essentiel.md`](./ressources/04_Loguru_middleware_essentiel.md) |
-| Versionning sémantique modèle | [`05_Versionning_modele_essentiel.md`](./ressources/05_Versionning_modele_essentiel.md) |
+- **`GET /info`** — source de vérité runtime : `api_version` (celle de l'app FastAPI, `app/main.py`), `model_version` + `dataset_sha256` + `metrics_holdout` (lus dans `models/pyrenex_risk_v2.json` chargé au `lifespan`).
+- **Tag git** — source de vérité du code déployé : `git tag v0.1.0-api` marque le commit correspondant à une version d'API buildée/déployée (`git tag -l`, `git describe --tags`). Un déploiement sans tag = pas de checkpoint de rollback.
 
-Cf. [`./ressources/README.md`](./ressources/README.md) pour l'ordre de mobilisation détaillé.
+En cas de doute sur ce qui tourne réellement (cf. l'incident de collision de port sur 8000), croiser `/info` avec `docker inspect <container> --format '{{.Config.Image}}'` pour confirmer quelle image est effectivement derrière le port.
 
 ---
 
-## 📥 Modèle (depuis M1-B1)
+## 🎯 Préparation M5
 
-**Avant tout**, copie ton modèle M1-B1 :
-
-```bash
-cp ../M1-B1-scoring-<prenom>/models/pyrenex_risk_v2.joblib ./models/
-cp ../M1-B1-scoring-<prenom>/models/pyrenex_risk_v2.json   ./models/
-```
-
-Le service ne démarre pas sans ces 2 fichiers.
-
----
-
-## 🧭 Démarche attendue
-
-### Mercredi après-midi — sync (2 h 15)
-
-1. **Sanity check** : recharger le `.joblib` dans un script séparé (5 min)
-2. **Squelette FastAPI** : `/health`, `/info`, `/predict` (1 h 15)
-3. **Dockerfile minimal** : build + run + curl OK (30 min)
-4. **Tour de table** Discord 16h30 : démo curl + discussion versionning (30 min)
-
-### Async jeudi/vendredi (6 h)
-
-5. **Contract test** d'abord (`test_model_contract.py`) puis **tests d'API**
-   (≥ 3) en local **et** dans le container — **volume monté** en priorité
-   (voie rapide), `Dockerfile.test` en option CI/CD (cf. mini-cours 03)
-   (1 h 30)
-6. **Loguru middleware** avec `request_id` + format JSON + rotation logs.
-   ⚠️ **Aucune PII** dans les logs (cf. mini-cours 04) (45 min)
-7. **README complet** + schéma Mermaid + tag `v0.1.0-api` (2 h)
-8. **Finition** + préparation RDV vendredi (1 h 45)
-
-Mini-cours d'appui : voir [`./ressources/`](./ressources/).
-
----
-
-## ✅ Conventions de code
-
-- Python 3.11+
-- Type hints sur toutes les signatures publiques
-- Pas de `print` — utiliser Loguru
-- `pathlib.Path` pour les chemins (pas de `os.path`)
-- Tests pytest **avec fixtures** (pas de boilerplate dupliqué)
-- Loguru en **JSON** (`serialize=True`) sur fichier, coloré en console
-
----
-
-## 🆘 Bloqué·e ?
-
-1. **Swagger** : ouvre `http://localhost:8000/docs` — souvent le plus
-   rapide pour débugger.
-2. **Logs** : lis `logs/api.log` pour repérer les exceptions.
-3. **Tests local d'abord, Docker ensuite** : si `pytest` est rouge en
-   local, inutile de tester Docker — fix le code d'abord.
-4. **`docker logs <container>`** : voir ce que le container raconte au
-   démarrage.
-5. Mini-cours dédiés dans [`./ressources/`](./ressources/).
+- **Auth** : `HTTPBearer` déjà scaffoldé sur `/predict` (non vérifié) — à durcir en Bearer/OAuth2 réel.
+- **CI/CD gate** : les tests pytest actuels (contrat modèle + API) deviennent la porte de merge/déploiement.
+- **Observabilité** : middleware Prometheus + dashboard, en complément du logging Loguru existant.
+- **Model registry** : remplacer la copie manuelle du `.joblib` par MLflow Registry ou DVC.
+- **Scaling** : rate limiting, orchestration Kubernetes/autoscaling, tests de charge (Locust/k6).
