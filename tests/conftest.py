@@ -30,16 +30,20 @@ def client() -> TestClient:
 
 @pytest.fixture
 def valid_payload() -> dict:
-    """Valid loan application payload.
-
-    TODO — Align with the actual LoanApplication schema and feature_columns
-    of pyrenex_risk_v2.json. The example below is a placeholder.
-    """
+    """Valid loan application payload."""
     return {
-        "loan_amnt": 10000,
+        "loan_amnt": 10_000,
         "term": "36 months",
         "int_rate": 12.5,
         "annual_inc": 60000,
         "purpose": "debt_consolidation",
-        # TODO — Add the remaining fields
+        "installment": 320.75,
+        "dti": 15.0,
+        "delinq_2yrs": 0,
+        "fico_range_low": 700,
+        "revol_util": 45.0,
+        "grade": "B",
+        "emp_length": "5 years",
+        "home_ownership": "MORTGAGE",
+        "verification_status": "Verified",
     }
